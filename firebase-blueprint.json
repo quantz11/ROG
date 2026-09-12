@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Log of actions performed by administrators to track who made changes",
+      "type": "object",
+      "properties": {
+        "adminUid": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "adminDisplayName": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "target": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminUid", "adminEmail", "action", "details", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Collection of administrator activity logs"
+    }
+  }
+}
