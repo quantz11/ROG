@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { EventType } from '../types';
+import { EventType, Settings } from '../types';
 import { X, Calendar, Sparkles, Clock, Check, AlertCircle } from 'lucide-react';
 import { format12HourTime } from '../utils/calculations';
 
@@ -9,6 +9,7 @@ interface EventBulkGeneratorModalProps {
   eventTypes: EventType[];
   selectedYear: number;
   selectedMonth: number;
+  settings?: Settings;
   onGenerate: (selectedEventTypeId: string, weekdays: number[], points: number, time?: string) => Promise<void> | void;
 }
 
@@ -33,12 +34,13 @@ export const EventBulkGeneratorModal: React.FC<EventBulkGeneratorModalProps> = (
   eventTypes,
   selectedYear,
   selectedMonth,
+  settings,
   onGenerate
 }) => {
-  const [selectedEventTypeId, setSelectedEventTypeId] = useState<string>('');
-  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([2]); // Default Tuesday
+  const [selectedEventTypeId, setSelectedEventTypeId] = useState<string>(settings?.defaultEventTypeId || '');
+  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>(settings?.defaultEventWeekdays || [2]); // Default Tuesday
   const [points, setPoints] = useState<number>(7);
-  const [time, setTime] = useState<string>('');
+  const [time, setTime] = useState<string>(settings?.defaultEventTime || '');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -46,14 +48,31 @@ export const EventBulkGeneratorModal: React.FC<EventBulkGeneratorModalProps> = (
   useEffect(() => {
     if (isOpen && eventTypes.length > 0) {
       if (!selectedEventTypeId || !eventTypes.some(et => et.id === selectedEventTypeId)) {
-        const firstET = eventTypes[0];
-        setSelectedEventTypeId(firstET.id);
-        setPoints(firstET.points);
+        const defaultET = settings?.defaultEventTypeId && eventTypes.some(et => et.id === settings.defaultEventTypeId)
+          ? eventTypes.find(et => et.id === settings.defaultEventTypeId)!
+          : eventTypes[0];
+        setSelectedEventTypeId(defaultET.id);
+        const effectivePts = settings?.eventPointConfiguration?.[defaultET.id] ?? defaultET.points;
+        setPoints(effectivePts);
+      } else {
+        const found = eventTypes.find(et => et.id === selectedEventTypeId);
+        if (found) {
+          const effectivePts = settings?.eventPointConfiguration?.[found.id] ?? found.points;
+          setPoints(effectivePts);
+        }
       }
+      
+      if (settings?.defaultEventWeekdays) {
+        setSelectedWeekdays(settings.defaultEventWeekdays);
+      }
+      if (settings?.defaultEventTime !== undefined) {
+        setTime(settings.defaultEventTime);
+      }
+      
       setError(null);
       setIsSubmitting(false);
     }
-  }, [isOpen, eventTypes]);
+  }, [isOpen, eventTypes, settings]);
 
   // Preview generated dates
   const previewDates = useMemo(() => {
@@ -80,7 +99,8 @@ export const EventBulkGeneratorModal: React.FC<EventBulkGeneratorModalProps> = (
     setSelectedEventTypeId(id);
     const found = eventTypes.find(et => et.id === id);
     if (found) {
-      setPoints(found.points);
+      const effectivePts = settings?.eventPointConfiguration?.[found.id] ?? found.points;
+      setPoints(effectivePts);
     }
   };
 
@@ -168,7 +188,7 @@ export const EventBulkGeneratorModal: React.FC<EventBulkGeneratorModalProps> = (
             >
               {displayEventTypes.map(et => (
                 <option key={et.id} value={et.id}>
-                  {et.icon} {et.name} ({et.points} pts)
+                  {et.icon} {et.name} ({settings?.eventPointConfiguration?.[et.id] ?? et.points} pts)
                 </option>
               ))}
             </select>

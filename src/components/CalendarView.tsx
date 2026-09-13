@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { ClanEvent, EventType } from '../types';
+import { ClanEvent, EventType, Settings } from '../types';
 import { CalendarDays, ChevronLeft, ChevronRight, Award, Clock, Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { ActiveTab } from './Navbar';
-import { format12HourTime } from '../utils/calculations';
+import { format12HourTime, getEventEffectivePoints } from '../utils/calculations';
+import { EventDropsSection } from './EventDropsSection';
 
 interface CalendarViewProps {
   events: ClanEvent[];
@@ -12,6 +13,10 @@ interface CalendarViewProps {
   onSelectYearMonth: (year: number, month: number) => void;
   onNavigate: (tab: ActiveTab) => void;
   onNavigateSettingsSchedule: () => void;
+  settings: Settings;
+  isAdmin: boolean;
+  adminUid: string;
+  onOpenAuth: () => void;
 }
 
 const MONTH_NAMES = [
@@ -28,7 +33,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   selectedMonth,
   onSelectYearMonth,
   onNavigate,
-  onNavigateSettingsSchedule
+  onNavigateSettingsSchedule,
+  settings,
+  isAdmin,
+  adminUid,
+  onOpenAuth
 }) => {
   const [selectedEventDetails, setSelectedEventDetails] = useState<ClanEvent | null>(null);
 
@@ -187,7 +196,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             {ev.name}
                           </p>
                           <span className="text-[9px] font-bold bg-amber-500/20 text-amber-400 px-1 rounded shrink-0">
-                            +{ev.points}p
+                            +{getEventEffectivePoints(ev, eventTypes, settings)}p
                           </span>
                         </div>
                         {ev.time && (
@@ -244,7 +253,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               <div className="flex items-center justify-between py-2 border-b border-neutral-800/60">
                 <span className="text-neutral-400 text-xs">Points Value</span>
                 <span className="font-bold text-amber-400 flex items-center gap-1">
-                  <Award className="w-4 h-4" /> +{selectedEventDetails.points} Points
+                  <Award className="w-4 h-4" /> +{getEventEffectivePoints(selectedEventDetails, eventTypes, settings)} Points
                 </span>
               </div>
               <div className="flex items-center justify-between py-2">
@@ -254,6 +263,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 </span>
               </div>
             </div>
+
+            <EventDropsSection
+              event={selectedEventDetails}
+              settings={settings}
+              isAdmin={isAdmin}
+              adminUid={adminUid}
+              onOpenAuth={onOpenAuth}
+            />
 
             <div className="flex justify-end gap-3 pt-4 border-t border-neutral-800">
               <button

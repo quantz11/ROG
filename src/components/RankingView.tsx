@@ -7,6 +7,7 @@ interface RankingViewProps {
   settings: Settings;
   selectedYear: number;
   selectedMonth: number;
+  onOpenMemberDetails: (id: string) => void;
 }
 
 const MONTH_NAMES = [
@@ -18,7 +19,8 @@ export const RankingView: React.FC<RankingViewProps> = ({
   memberStats,
   settings,
   selectedYear,
-  selectedMonth
+  selectedMonth,
+  onOpenMemberDetails
 }) => {
   const [limitCount, setLimitCount] = useState<number>(10);
   const [filterType, setFilterType] = useState<'all' | 'eligible' | 'not_eligible'>('all');
@@ -138,7 +140,12 @@ export const RankingView: React.FC<RankingViewProps> = ({
                         </div>
                       </td>
                       <td className="py-4 px-6 font-semibold text-white">
-                        {m.memberName}
+                        <button
+                          onClick={() => onOpenMemberDetails(m.memberId)}
+                          className="hover:text-amber-400 transition-colors text-left focus:outline-none"
+                        >
+                          {m.memberName}
+                        </button>
                         {!m.active && <span className="ml-2 text-[10px] bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded">Inactive</span>}
                       </td>
                       <td className="py-4 px-6 text-center text-neutral-300">

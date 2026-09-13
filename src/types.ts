@@ -46,6 +46,51 @@ export interface Settings {
   requiredEventTypeId: string;
   minimumRequiredAttendance: number;
   unlockedMonths: string[]; // "YYYY-MM"
+  itemCategories?: string[];
+  itemRarities?: string[];
+  // Event Config
+  defaultEventWeekdays?: number[];
+  defaultEventTime?: string;
+  defaultEventTypeId?: string;
+  eventPointConfiguration?: Record<string, number>;
+  eventPointsByShortName?: Record<string, number>;
+  eventPointsById?: Record<string, number>;
+}
+
+export type ItemDropStatus = 'AVAILABLE' | 'PARTIALLY_DISTRIBUTED' | 'DISTRIBUTED' | 'RESERVED';
+
+export interface DroppedItem {
+  id: string;
+  eventId: string;
+  eventTypeId: string;
+  eventDate: string; // YYYY-MM-DD
+  itemName: string;
+  itemCategory: string;
+  rarity: string;
+  quantity: number;
+  status: ItemDropStatus;
+  distributedQuantity: number;
+  notes: string;
+  createdAt: any;
+  createdBy: string;
+  updatedAt: any;
+  updatedBy: string;
+  year: number; // For easy querying
+  month: number; // For easy querying
+}
+
+export interface ItemDistribution {
+  id: string;
+  dropId: string;
+  eventId: string;
+  itemName: string;
+  memberId: string;
+  quantity: number;
+  distributedAt: any;
+  distributedBy: string;
+  notes: string;
+  year: number; // For easy querying
+  month: number; // For easy querying
 }
 
 export interface MemberMonthlyStats {

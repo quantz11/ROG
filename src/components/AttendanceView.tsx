@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Member, ClanEvent, EventType, AttendanceRecord, Settings, MemberMonthlyStats } from '../types';
 import { ChevronLeft, ChevronRight, Search, Download, Check, X, Shield, Plus, Calendar, Layers, Smartphone, Grid, CheckCircle2, XCircle, Users, AlertCircle, Lock, Unlock } from 'lucide-react';
 import { setAttendance, batchSetAttendance } from '../services/dataService';
-import { isMonthUnlocked, formatMonthKey, format12HourTime } from '../utils/calculations';
+import { isMonthUnlocked, formatMonthKey, format12HourTime, getEventEffectivePoints } from '../utils/calculations';
 
 interface AttendanceViewProps {
   members: Member[];
@@ -93,10 +93,11 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     // Maintain event types order based on eventTypes array
     eventTypes.forEach(et => {
       if (map.has(et.id)) {
+        const effectivePts = settings?.eventPointConfiguration?.[et.id] ?? et.points;
         groups.push({
           eventType: et,
           eventTypeId: et.id,
-          typeName: `${et.icon || '📅'} ${et.name} (${et.points} pts)`,
+          typeName: `${et.icon || '📅'} ${et.name} (${effectivePts} pts)`,
           events: map.get(et.id)!
         });
         map.delete(et.id);
@@ -622,7 +623,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                       className="py-3 px-3 text-center border-r border-neutral-800 uppercase tracking-wider"
                       style={{ color: group.eventType.color || '#f59e0b' }}
                     >
-                      {group.eventType.icon} {group.eventType.name} — {group.eventType.points} pts
+                      {group.eventType.icon} {group.eventType.name} — {settings?.eventPointConfiguration?.[group.eventType.id] ?? group.eventType.points} pts
                     </th>
                   ))}
                   <th className="py-3 px-4 text-center border-l border-neutral-800 bg-neutral-950 sticky right-[250px] z-20">
@@ -825,7 +826,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         <div>
                           <p className="text-xs font-semibold text-white">{ev.name}</p>
                           <p className="text-[10px] text-neutral-400">
-                            {ev.date}{ev.time ? ` • ${format12HourTime(ev.time)}` : ''} • {ev.points} pts
+                            {ev.date}{ev.time ? ` • ${format12HourTime(ev.time)}` : ''} • {getEventEffectivePoints(ev, eventTypes, settings)} pts
                           </p>
                         </div>
                       </div>
@@ -927,7 +928,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                     </label>
                     {currentBulkEvent && (
                       <span className="text-xs font-mono font-bold text-amber-400">
-                        {currentBulkEvent.points} Points Available
+                        {getEventEffectivePoints(currentBulkEvent, eventTypes, settings)} Points Available
                       </span>
                     )}
                   </div>
@@ -952,7 +953,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                               value={ev.id} 
                               className="bg-neutral-800 text-white font-normal py-1.5"
                             >
-                              {ev.name} — {ev.date} ({weekdayStr}){ev.time ? ` at ${format12HourTime(ev.time)}` : ''} • {ev.points} pts
+                              {ev.name} — {ev.date} ({weekdayStr}){ev.time ? ` at ${format12HourTime(ev.time)}` : ''} • {getEventEffectivePoints(ev, eventTypes, settings)} pts
                             </option>
                           );
                         })}

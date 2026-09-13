@@ -16,7 +16,7 @@ import {
   onSnapshot 
 } from 'firebase/firestore';
 import { db, auth } from './firebaseService';
-import { Member, EventType, ClanEvent, AttendanceRecord, Settings, AuditLog } from '../types';
+import { Member, EventType, ClanEvent, AttendanceRecord, Settings, AuditLog, DroppedItem, ItemDistribution } from '../types';
 import { format12HourTime } from '../utils/calculations';
 
 // Default seeding data
@@ -34,7 +34,9 @@ export const DEFAULT_SETTINGS: Settings = {
   minimumScorePercentage: 75,
   requiredEventTypeId: 'isw', // Will be resolved by shortName or ID after creation
   minimumRequiredAttendance: 4,
-  unlockedMonths: []
+  unlockedMonths: [],
+  itemCategories: ['Weapon', 'Armor', 'Accessory', 'Material', 'Enhancement Item', 'Skill Book', 'Box', 'Currency', 'Other'],
+  itemRarities: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic']
 };
 
 // Retry helper for Firestore read operations to gracefully handle transient network delays or backend cold-starts
@@ -207,6 +209,22 @@ export async function saveEventType(eventTypeId: string | null, data: Omit<Event
   if (eventTypeId) {
     const ref = doc(db, 'eventTypes', eventTypeId);
     await updateDoc(ref, { ...data });
+
+    // Sync all existing events of this eventTypeId to new points
+    if (typeof data.points === 'number') {
+      try {
+        const eventsSnap = await getDocs(query(collection(db, 'events'), where('eventTypeId', '==', eventTypeId)));
+        const evUpdates = eventsSnap.docs
+          .filter(d => d.data().points !== data.points)
+          .map(d => updateDoc(doc(db, 'events', d.id), { points: data.points }));
+        if (evUpdates.length > 0) {
+          await Promise.all(evUpdates);
+        }
+      } catch (e) {
+        console.warn('Failed to update events points for event type', e);
+      }
+    }
+
     await logAdminAction({
       action: 'Updated Event Type',
       details: `Updated event type "${data.name}" (${data.shortName}, ${data.points} pts)`,
@@ -231,6 +249,86 @@ export async function deleteEventType(id: string, typeName?: string): Promise<vo
     action: 'Deleted Event Type',
     details: `Deleted event type "${typeName || id}"`,
     target: 'events'
+  });
+}
+
+// --- EVENT POINT CONFIGURATION ---
+export async function savePointsConfiguration(
+  pointsMap: Record<string, number>,
+  eventTypes: EventType[]
+): Promise<void> {
+  const pointsByShortName: Record<string, number> = {};
+  const pointsByEventId: Record<string, number> = {};
+  const detailedList: any[] = [];
+  const updates: Promise<any>[] = [];
+
+  for (const et of eventTypes) {
+    const { id, ...rest } = et;
+    const cleanRest = Object.fromEntries(
+      Object.entries(rest).filter(([_, v]) => v !== undefined)
+    );
+    const newPoints = pointsMap[id] !== undefined ? Number(pointsMap[id]) : Number(et.points);
+
+    pointsByShortName[et.shortName] = newPoints;
+    pointsByEventId[id] = newPoints;
+    detailedList.push({
+      id,
+      name: et.name,
+      shortName: et.shortName,
+      points: newPoints
+    });
+
+    // Save to eventTypes collection
+    const etRef = doc(db, 'eventTypes', id);
+    updates.push(setDoc(etRef, { ...cleanRest, points: newPoints }, { merge: true }));
+  }
+
+  // 1. Update all eventTypes docs
+  await Promise.all(updates);
+
+  // 2. Save entry into 'settings/config' under eventPointConfiguration
+  const settingsRef = doc(db, 'settings', 'config');
+  await setDoc(settingsRef, {
+    eventPointConfiguration: {
+      ...pointsByEventId,
+      ...pointsByShortName,
+    },
+    eventPointsByShortName: pointsByShortName,
+    eventPointsById: pointsByEventId,
+  }, { merge: true });
+
+  // 3. Save entry into dedicated collection 'eventPointConfiguration', document 'config'
+  const epcRef = doc(db, 'eventPointConfiguration', 'config');
+  await setDoc(epcRef, {
+    pointsByShortName,
+    pointsByEventId,
+    eventTypes: detailedList,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+
+  // 4. Synchronize points for all existing events in 'events' collection
+  try {
+    const eventsSnap = await getDocs(collection(db, 'events'));
+    const eventUpdates: Promise<any>[] = [];
+    for (const evDoc of eventsSnap.docs) {
+      const evData = evDoc.data();
+      const updatedPts = pointsByEventId[evData.eventTypeId];
+      if (typeof updatedPts === 'number' && evData.points !== updatedPts) {
+        eventUpdates.push(updateDoc(doc(db, 'events', evDoc.id), { points: updatedPts }));
+      }
+    }
+    if (eventUpdates.length > 0) {
+      await Promise.all(eventUpdates);
+    }
+  } catch (err) {
+    console.warn('Failed to sync existing events points:', err);
+  }
+
+  // 5. Log admin audit action
+  await logAdminAction({
+    action: 'Updated Points Configuration',
+    details: `Updated default points configuration for ${eventTypes.length} event types in Firestore (${Object.entries(pointsByShortName).map(([k, v]) => `${k}: ${v}pts`).join(', ')})`,
+    target: 'settings'
   });
 }
 
@@ -394,7 +492,7 @@ export async function getSettings(): Promise<Settings> {
     const ref = doc(db, 'settings', 'config');
     const snapshot = await getDoc(ref);
     if (snapshot.exists()) {
-      return snapshot.data() as Settings;
+      return { ...DEFAULT_SETTINGS, ...snapshot.data() } as Settings;
     } else {
       return DEFAULT_SETTINGS;
     }
@@ -456,6 +554,134 @@ export async function initializeDefaultData(): Promise<void> {
   await logAdminAction({
     action: 'Initialized Defaults',
     details: 'Initialized default ROG clan settings, event types, and roster',
+    target: 'general'
+  });
+}
+
+// --- ITEM DROPS ---
+export async function getDroppedItemsForMonth(year: number, month: number): Promise<DroppedItem[]> {
+  return withRetry(async () => {
+    const q = query(
+      collection(db, 'droppedItems'),
+      where('year', '==', year),
+      where('month', '==', month)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DroppedItem));
+  });
+}
+
+export async function getDroppedItemsForEvent(eventId: string): Promise<DroppedItem[]> {
+  return withRetry(async () => {
+    const q = query(collection(db, 'droppedItems'), where('eventId', '==', eventId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DroppedItem));
+  });
+}
+
+export async function addDroppedItem(item: Omit<DroppedItem, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'distributedQuantity' | 'createdBy' | 'updatedBy'>, adminUid: string): Promise<string> {
+  const docRef = await addDoc(collection(db, 'droppedItems'), {
+    ...item,
+    status: 'AVAILABLE',
+    distributedQuantity: 0,
+    createdAt: serverTimestamp(),
+    createdBy: adminUid || 'admin',
+    updatedAt: serverTimestamp(),
+    updatedBy: adminUid || 'admin'
+  });
+  await logAdminAction({
+    action: 'Added Dropped Item',
+    details: `Added dropped item "${item.quantity}x ${item.itemName}"`,
+    target: 'general'
+  });
+  return docRef.id;
+}
+
+export async function updateDroppedItem(id: string, data: Partial<DroppedItem>, adminUid: string): Promise<void> {
+  const ref = doc(db, 'droppedItems', id);
+  await updateDoc(ref, {
+    ...data,
+    updatedAt: serverTimestamp(),
+    updatedBy: adminUid || 'admin'
+  });
+  await logAdminAction({
+    action: 'Updated Dropped Item',
+    details: `Updated dropped item record`,
+    target: 'general'
+  });
+}
+
+export async function deleteDroppedItem(id: string, itemName?: string): Promise<void> {
+  const ref = doc(db, 'droppedItems', id);
+  await deleteDoc(ref);
+  await logAdminAction({
+    action: 'Deleted Dropped Item',
+    details: `Deleted dropped item "${itemName || id}"`,
+    target: 'general'
+  });
+}
+
+// --- ITEM DISTRIBUTIONS ---
+export async function getItemDistributionsForMonth(year: number, month: number): Promise<ItemDistribution[]> {
+  return withRetry(async () => {
+    const q = query(
+      collection(db, 'itemDistributions'),
+      where('year', '==', year),
+      where('month', '==', month)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ItemDistribution));
+  });
+}
+
+export async function getItemDistributionsByMember(memberId: string): Promise<ItemDistribution[]> {
+  return withRetry(async () => {
+    const q = query(collection(db, 'itemDistributions'), where('memberId', '==', memberId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ItemDistribution));
+  });
+}
+
+export async function distributeItem(drop: DroppedItem, memberId: string, quantity: number, notes: string, adminUid: string): Promise<void> {
+  const batch = writeBatch(db);
+  
+  // 1. Create distribution record
+  const distRef = doc(collection(db, 'itemDistributions'));
+  batch.set(distRef, {
+    dropId: drop.id,
+    eventId: drop.eventId,
+    itemName: drop.itemName,
+    memberId,
+    quantity,
+    distributedAt: serverTimestamp(),
+    distributedBy: adminUid || 'admin',
+    notes,
+    year: drop.year,
+    month: drop.month
+  });
+
+  // 2. Update drop status and quantities
+  const newDistributedQty = drop.distributedQuantity + quantity;
+  let newStatus = drop.status;
+  if (newDistributedQty >= drop.quantity) {
+    newStatus = 'DISTRIBUTED';
+  } else if (newDistributedQty > 0) {
+    newStatus = 'PARTIALLY_DISTRIBUTED';
+  }
+
+  const dropRef = doc(db, 'droppedItems', drop.id);
+  batch.update(dropRef, {
+    distributedQuantity: newDistributedQty,
+    status: newStatus,
+    updatedAt: serverTimestamp(),
+    updatedBy: adminUid || 'admin'
+  });
+
+  await batch.commit();
+
+  await logAdminAction({
+    action: 'Distributed Item',
+    details: `Distributed ${quantity}x ${drop.itemName} to member ${memberId}`,
     target: 'general'
   });
 }

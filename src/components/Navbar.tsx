@@ -1,7 +1,7 @@
 import React from 'react';
-import { LayoutDashboard, CalendarDays, CalendarCheck, Trophy, BarChart3, History, Settings } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, CalendarCheck, Trophy, BarChart3, History, Settings, Gift } from 'lucide-react';
 
-export type ActiveTab = 'dashboard' | 'calendar' | 'attendance' | 'ranking' | 'analytics' | 'history' | 'settings';
+export type ActiveTab = 'dashboard' | 'calendar' | 'attendance' | 'ranking' | 'analytics' | 'history' | 'items' | 'settings';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -15,6 +15,7 @@ const navItems: { id: ActiveTab; label: string; icon: React.ComponentType<{ clas
   { id: 'ranking', label: 'Ranking', icon: Trophy },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'history', label: 'History', icon: History },
+  { id: 'items', label: 'Items', icon: Gift },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 

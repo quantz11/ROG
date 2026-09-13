@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { Member, EventType, ClanEvent, Settings } from '../types';
 import { 
   Users, Calendar, Shield, Award, Settings as SettingsIcon, 
-  Plus, Trash2, Edit2, Save, AlertTriangle, Check, X, Sparkles, Clock, ScrollText 
+  Plus, Trash2, Edit2, Save, AlertTriangle, Check, X, Sparkles, Clock, ScrollText,
+  CheckCircle, Loader2, FileText 
 } from 'lucide-react';
 import { 
   addMember, updateMember, deleteMemberRecord, 
-  saveEventType, deleteEventType, createEvent, updateEvent, deleteEvent, saveSettings 
+  saveEventType, deleteEventType, createEvent, updateEvent, deleteEvent, saveSettings,
+  savePointsConfiguration 
 } from '../services/dataService';
 import { AuditLogsTab } from './AuditLogsTab';
-import { format12HourTime } from '../utils/calculations';
+import { format12HourTime, getEventEffectivePoints } from '../utils/calculations';
 
 interface SettingsViewProps {
   members: Member[];
@@ -22,6 +24,7 @@ interface SettingsViewProps {
   isAdmin: boolean;
   onOpenAuth: () => void;
   initialTab?: 'members' | 'events' | 'schedule' | 'points' | 'eligibility' | 'clan' | 'logs';
+  onOpenMemberDetails?: (memberId: string) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -34,7 +37,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onRefreshData,
   isAdmin,
   onOpenAuth,
-  initialTab = 'members'
+  initialTab = 'members',
+  onOpenMemberDetails
 }) => {
   const [activeTab, setActiveTab] = useState<'members' | 'events' | 'schedule' | 'points' | 'eligibility' | 'clan' | 'logs'>(initialTab);
 
@@ -55,9 +59,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // Schedule state
   const [schedDate, setSchedDate] = useState(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`);
-  const [schedTime, setSchedTime] = useState('');
-  const [schedEventTypeId, setSchedEventTypeId] = useState(eventTypes[0]?.id || '');
-  const [schedPoints, setSchedPoints] = useState(eventTypes[0]?.points || 7);
+  const [schedTime, setSchedTime] = useState(settings.defaultEventTime || '');
+  const [schedEventTypeId, setSchedEventTypeId] = useState(settings.defaultEventTypeId || eventTypes[0]?.id || '');
+  const [schedPoints, setSchedPoints] = useState(eventTypes.find(et => et.id === (settings.defaultEventTypeId || eventTypes[0]?.id))?.points || 7);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   // Points state (temporary points state for points config tab)
@@ -66,6 +70,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     eventTypes.forEach(et => map[et.id] = et.points);
     return map;
   });
+
+  React.useEffect(() => {
+    setPointsForm(prev => {
+      const map = { ...prev };
+      let changed = false;
+      eventTypes.forEach(et => {
+        if (map[et.id] === undefined) {
+          map[et.id] = et.points;
+          changed = true;
+        }
+      });
+      return changed ? map : prev;
+    });
+  }, [eventTypes]);
 
   // Eligibility state
   const [eligibilityForm, setEligibilityForm] = useState({
@@ -79,6 +97,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     clanName: settings.clanName,
     serverName: settings.serverName
   });
+
+  // In-app Alert / Status Notification
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isSavingPoints, setIsSavingPoints] = useState(false);
+  const [pointsSavedRecently, setPointsSavedRecently] = useState(false);
+
+  const showAlert = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ type, message });
+    if (type === 'error') {
+      console.error(message);
+    } else {
+      console.log(message);
+    }
+  };
 
   // --- MEMBER ACTIONS ---
   const handleCreateOrUpdateMember = async (e: React.FormEvent) => {
@@ -95,10 +127,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setNewMemberName('');
       setEditingMember(null);
       setIsAddMemberOpen(false);
+      showAlert(editingMember ? 'Member updated successfully!' : 'Member added successfully!', 'success');
       onRefreshData();
     } catch (err) {
       console.error('Member action failed', err);
-      alert('Failed to save member.');
+      showAlert('Failed to save member.', 'error');
     }
   };
 
@@ -147,10 +180,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       });
       setIsAddEventTypeOpen(false);
       setEditingEventType(null);
+      showAlert(editingEventType ? 'Event type updated successfully!' : 'Event type added successfully!', 'success');
       onRefreshData();
     } catch (err) {
       console.error('Save event type failed', err);
-      alert('Failed to save event type.');
+      showAlert('Failed to save event type.', 'error');
     }
   };
 
@@ -188,10 +222,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         await deleteEvent(deleteConfirm.id, targetEv?.name);
       }
       setDeleteConfirm(null);
+      showAlert('Deletion completed successfully.', 'success');
       onRefreshData();
     } catch (err) {
       console.error('Delete action failed', err);
-      alert('Failed to complete deletion.');
+      showAlert('Failed to complete deletion.', 'error');
       setDeleteConfirm(null);
     }
   };
@@ -231,7 +266,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           month: m,
           points: Number(schedPoints)
         });
-        alert('Event updated successfully!');
+        showAlert('Event updated successfully in Firestore!', 'success');
         handleCancelEditEvent();
       } else {
         await createEvent({
@@ -244,13 +279,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           points: Number(schedPoints),
           active: true
         });
-        alert('Event scheduled successfully!');
+        showAlert('Event scheduled successfully in Firestore!', 'success');
         setSchedTime('');
       }
       onRefreshData();
     } catch (err) {
       console.error('Schedule event failed', err);
-      alert(editingEventId ? 'Failed to update event.' : 'Failed to schedule event.');
+      showAlert(editingEventId ? 'Failed to update event in Firestore.' : 'Failed to schedule event in Firestore.', 'error');
     }
   };
 
@@ -259,18 +294,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     e.preventDefault();
     if (!isAdmin) { onOpenAuth(); return; }
 
+    setIsSavingPoints(true);
     try {
-      for (const etId of Object.keys(pointsForm)) {
-        await saveEventType(etId, {
-          ...eventTypes.find(et => et.id === etId)!,
-          points: Number(pointsForm[etId])
-        });
-      }
-      alert('Points configuration saved successfully!');
+      await savePointsConfiguration(pointsForm, eventTypes);
+      setPointsSavedRecently(true);
+      showAlert('Event Point Configuration successfully saved to Firestore!', 'success');
       onRefreshData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Save points failed', err);
-      alert('Failed to save points.');
+      showAlert('Failed to save points: ' + (err?.message || 'Unknown error'), 'error');
+    } finally {
+      setIsSavingPoints(false);
     }
   };
 
@@ -287,10 +321,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         },
         `Updated eligibility criteria (Min Score: ${eligibilityForm.minimumScorePercentage}%, Required Events: ${eligibilityForm.minimumRequiredAttendance})`
       );
-      alert('Eligibility settings saved successfully!');
+      showAlert('Eligibility settings saved successfully in Firestore!', 'success');
       onRefreshData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Save eligibility failed', err);
+      showAlert('Failed to save eligibility settings: ' + (err?.message || 'Unknown error'), 'error');
     }
   };
 
@@ -307,10 +342,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         },
         `Updated clan details (Clan: "${clanForm.clanName}", Server: "${clanForm.serverName}")`
       );
-      alert('Clan settings saved successfully!');
+      showAlert('Clan settings saved successfully in Firestore!', 'success');
       onRefreshData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Save clan failed', err);
+      showAlert('Failed to save clan settings: ' + (err?.message || 'Unknown error'), 'error');
+    }
+  };
+
+  // --- ITEMS CONFIG SAVE ---
+  const [itemsForm, setItemsForm] = useState({
+    itemCategories: (settings.itemCategories || ['Weapon', 'Armor', 'Accessory', 'Material', 'Enhancement Item', 'Skill Book', 'Box', 'Currency', 'Other']).join('\n'),
+    itemRarities: (settings.itemRarities || ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic']).join('\n')
+  });
+
+  const handleSaveItemsConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) { onOpenAuth(); return; }
+
+    const categories = itemsForm.itemCategories.split('\n').map(c => c.trim()).filter(c => c);
+    const rarities = itemsForm.itemRarities.split('\n').map(r => r.trim()).filter(r => r);
+
+    try {
+      await saveSettings(
+        {
+          ...settings,
+          itemCategories: categories,
+          itemRarities: rarities
+        },
+        `Updated item configurations`
+      );
+      showAlert('Item configuration saved successfully in Firestore!', 'success');
+      onRefreshData();
+    } catch (err: any) {
+      console.error('Save items failed', err);
+      showAlert('Failed to save item configuration: ' + (err?.message || 'Unknown error'), 'error');
     }
   };
 
@@ -326,7 +392,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
         <h2 className="text-2xl font-black text-white">Administrator Settings</h2>
         <p className="text-xs text-neutral-400 mt-1">
-          Manage members, event types, event schedules, points, eligibility rules, and clan branding.
+          Manage members, event types, event schedules, points, eligibility rules, items config, and clan branding.
         </p>
 
         {/* Settings Navigation Tabs */}
@@ -338,6 +404,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             { id: 'points', label: 'Points', icon: Award },
             { id: 'eligibility', label: 'Eligibility', icon: Shield },
             { id: 'clan', label: 'Clan Settings', icon: SettingsIcon },
+            { id: 'items', label: 'Items Config', icon: Sparkles },
             { id: 'logs', label: 'Admin Logs', icon: ScrollText },
           ].map(tab => {
             const Icon = tab.icon;
@@ -360,13 +427,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
+      {/* In-app Notification Alert Banner */}
+      {notification && (
+        <div className={`p-4 rounded-xl flex items-center justify-between border shadow-lg transition-all animate-fadeIn ${
+          notification.type === 'success' 
+            ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200' 
+            : 'bg-red-950/90 border-red-500/50 text-red-200'
+        }`}>
+          <div className="flex items-center gap-3 text-sm font-medium">
+            {notification.type === 'success' ? (
+              <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+            )}
+            <span>{notification.message}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setNotification(null)}
+            className="p-1 hover:bg-white/10 rounded-lg text-xs text-neutral-400 hover:text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* TAB 1: MEMBERS */}
       {activeTab === 'members' && (
         <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-white">Member Management</h3>
-              <p className="text-xs text-neutral-400">Add, edit, or deactivate clan members. Supports international unicode names.</p>
+              <p className="text-xs text-neutral-400">Add, edit, or deactivate clan members. Click a member's name to view their monthly report.</p>
             </div>
 
             <button
@@ -399,16 +491,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               filteredMembers.map(member => (
                 <div key={member.id} className="p-4 flex items-center justify-between hover:bg-neutral-800/30 transition-colors">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-neutral-800 text-amber-400 flex items-center justify-center font-bold text-xs">
+                    <button
+                      type="button"
+                      onClick={() => onOpenMemberDetails?.(member.id)}
+                      className="w-9 h-9 rounded-lg bg-neutral-800 hover:bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs border border-transparent hover:border-amber-500/30 transition-colors cursor-pointer focus:outline-none shrink-0"
+                      title={`View monthly report for ${member.name}`}
+                    >
                       {member.name.substring(0, 2).toUpperCase()}
-                    </div>
+                    </button>
                     <div>
-                      <p className="text-sm font-semibold text-white">{member.name}</p>
+                      <button
+                        type="button"
+                        onClick={() => onOpenMemberDetails?.(member.id)}
+                        className="text-sm font-semibold text-white hover:text-amber-400 transition-colors text-left flex items-center gap-1.5 group cursor-pointer focus:outline-none"
+                        title={`View monthly report for ${member.name}`}
+                      >
+                        <span className="group-hover:underline underline-offset-2">{member.name}</span>
+                      </button>
                       <p className="text-[10px] text-neutral-400">Status: {member.active ? 'Active' : 'Inactive'}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onOpenMemberDetails?.(member.id)}
+                      className="px-2.5 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-amber-400 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-neutral-700/60"
+                      title={`View monthly report for ${member.name}`}
+                    >
+                      <FileText className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="hidden sm:inline">Report</span>
+                    </button>
                     <button
                       onClick={() => handleToggleMemberActive(member)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -598,12 +711,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     const id = e.target.value;
                     setSchedEventTypeId(id);
                     const found = eventTypes.find(et => et.id === id);
-                    if (found) setSchedPoints(found.points);
+                    if (found) {
+                      const eff = settings?.eventPointConfiguration?.[found.id] ?? found.points;
+                      setSchedPoints(eff);
+                    }
                   }}
                   className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
                 >
                   {eventTypes.map(et => (
-                    <option key={et.id} value={et.id}>{et.icon} {et.name} ({et.points} pts)</option>
+                    <option key={et.id} value={et.id}>
+                      {et.icon} {et.name} ({settings?.eventPointConfiguration?.[et.id] ?? et.points} pts)
+                    </option>
                   ))}
                 </select>
               </div>
@@ -666,7 +784,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           <p className="text-[10px] text-neutral-400 mt-0.5">
                             Date: <span className="text-neutral-300 font-mono">{ev.date}</span>
                             {ev.time && <span> at <strong className="text-amber-300 font-mono">{format12HourTime(ev.time)}</strong></span>}
-                            {' '}• {ev.points} pts
+                            {' '}• {getEventEffectivePoints(ev, eventTypes, settings)} pts
                           </p>
                         </div>
                       </div>
@@ -701,8 +819,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <form onSubmit={handleSavePointsConfig} className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-6">
           <div>
             <h3 className="text-lg font-bold text-white">Event Point Configuration</h3>
-            <p className="text-xs text-neutral-400">Configure default point values for future events.</p>
+            <p className="text-xs text-neutral-400">Configure default point values for events and update all scheduled events.</p>
           </div>
+
+          {pointsSavedRecently && (
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>
+                  <strong>Points configuration saved:</strong> Default event points and scheduled events have been updated and saved successfully.
+                </span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setPointsSavedRecently(false)}
+                className="text-emerald-400 hover:text-emerald-200 text-xs px-2 py-1 rounded"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
 
           <div className="space-y-4 max-w-xl">
             {eventTypes.map(et => (
@@ -732,9 +868,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="flex justify-end">
             <button
               type="submit"
-              className="bg-amber-500 hover:bg-amber-600 text-neutral-950 font-semibold px-6 py-3 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
+              disabled={isSavingPoints}
+              className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-neutral-950 font-semibold px-6 py-3 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
             >
-              <Save className="w-4 h-4" /> Save Points Configuration
+              {isSavingPoints ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Saving to Firestore...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" /> Save Points Configuration
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -838,7 +983,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </form>
       )}
 
-      {/* TAB 7: AUDIT LOGS */}
+      {/* TAB 7: ITEMS CONFIG */}
+      {activeTab === 'items' as any && (
+        <form onSubmit={handleSaveItemsConfig} className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-6 max-w-xl">
+          <div>
+            <h3 className="text-lg font-bold text-white">Item Drop Configuration</h3>
+            <p className="text-xs text-neutral-400">Configure item categories and rarities for drops. Put each entry on a new line.</p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-neutral-400 mb-1">Item Categories</label>
+              <textarea
+                value={itemsForm.itemCategories}
+                onChange={(e) => setItemsForm({ ...itemsForm, itemCategories: e.target.value })}
+                className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 min-h-[150px]"
+                placeholder="Weapon&#10;Armor&#10;Accessory..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-neutral-400 mb-1">Item Rarities</label>
+              <textarea
+                value={itemsForm.itemRarities}
+                onChange={(e) => setItemsForm({ ...itemsForm, itemRarities: e.target.value })}
+                className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 min-h-[150px]"
+                placeholder="Common&#10;Uncommon&#10;Rare..."
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              className="bg-amber-500 hover:bg-amber-600 text-neutral-950 font-semibold px-6 py-3 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
+            >
+              <Save className="w-4 h-4" /> Save Items Config
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* TAB 8: AUDIT LOGS */}
       {activeTab === 'logs' && (
         <AuditLogsTab isAdmin={isAdmin} onOpenAuth={onOpenAuth} />
       )}

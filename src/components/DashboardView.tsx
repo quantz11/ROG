@@ -11,6 +11,7 @@ interface DashboardViewProps {
   selectedYear: number;
   selectedMonth: number;
   onNavigate: (tab: ActiveTab) => void;
+  onOpenMemberDetails: (id: string) => void;
 }
 
 const MONTH_NAMES = [
@@ -24,7 +25,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   settings,
   selectedYear,
   selectedMonth,
-  onNavigate
+  onNavigate,
+  onOpenMemberDetails
 }) => {
   const activeMembersCount = memberStats.filter(m => m.active).length;
   const eventsThisMonthCount = events.filter(e => e.active).length;
@@ -173,7 +175,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {idx + 1}
                   </span>
                   <div>
-                    <p className="text-sm font-semibold text-white">{m.memberName}</p>
+                    <button
+                      onClick={() => onOpenMemberDetails(m.memberId)}
+                      className="text-sm font-semibold text-white hover:text-amber-400 transition-colors text-left focus:outline-none"
+                    >
+                      {m.memberName}
+                    </button>
                     <p className="text-xs text-neutral-400">{m.totalPoints} pts total</p>
                   </div>
                 </div>

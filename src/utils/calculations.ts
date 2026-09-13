@@ -1,5 +1,38 @@
 import { Member, ClanEvent, EventType, AttendanceRecord, Settings, MemberMonthlyStats } from '../types';
 
+export function getEventEffectivePoints(
+  event: ClanEvent,
+  eventTypes: EventType[],
+  settings?: Settings
+): number {
+  if (!event) return 0;
+
+  // 1. Check settings.eventPointConfiguration by eventTypeId
+  if (settings?.eventPointConfiguration) {
+    const configVal = settings.eventPointConfiguration[event.eventTypeId];
+    if (typeof configVal === 'number') {
+      return configVal;
+    }
+  }
+
+  // 2. Check eventTypes array by eventTypeId
+  const et = eventTypes.find(t => t.id === event.eventTypeId);
+  if (et && typeof et.points === 'number') {
+    return et.points;
+  }
+
+  // 3. Check settings.eventPointConfiguration by event shortName if available
+  if (et && settings?.eventPointConfiguration) {
+    const byShortName = settings.eventPointConfiguration[et.shortName];
+    if (typeof byShortName === 'number') {
+      return byShortName;
+    }
+  }
+
+  // 4. Fallback to event.points or 0
+  return typeof event.points === 'number' ? event.points : 0;
+}
+
 export function calculateMonthlyStats(
   members: Member[],
   events: ClanEvent[],
@@ -15,11 +48,11 @@ export function calculateMonthlyStats(
   // Filter active members unless showInactive is true
   const filteredMembers = members.filter(m => showInactive || m.active);
 
-  // Calculate Maximum Monthly Points: sum of points of all active events in that month
+  // Calculate Maximum Monthly Points: sum of effective points of all active events in that month
   let maxPoints = 0;
   const activeEvents = events.filter(e => e.active);
   activeEvents.forEach(e => {
-    maxPoints += (e.points || 0);
+    maxPoints += getEventEffectivePoints(e, eventTypes, settings);
   });
 
   // Map eventId -> ClanEvent for quick lookup
@@ -54,7 +87,7 @@ export function calculateMonthlyStats(
 
       if (isAttended) {
         eventsAttendedCount++;
-        totalPoints += (event.points || 0);
+        totalPoints += getEventEffectivePoints(event, eventTypes, settings);
       }
 
       // Check if this event matches required event type

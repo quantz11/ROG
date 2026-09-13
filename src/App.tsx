@@ -17,6 +17,7 @@ import { AttendanceView } from './components/AttendanceView';
 import { RankingView } from './components/RankingView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { HistoryView } from './components/HistoryView';
+import { ItemDistributionView } from './components/ItemDistributionView';
 import { SettingsView } from './components/SettingsView';
 import { CalendarView } from './components/CalendarView';
 import { AuthModal } from './components/AuthModal';
@@ -27,11 +28,11 @@ import { MemberDetailsModal } from './components/MemberDetailsModal';
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
-  
+
   // Current selected year & month (default Sept 2026 as requested in prompt examples)
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [selectedMonth, setSelectedMonth] = useState<number>(9);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'members' | 'events' | 'schedule' | 'points' | 'eligibility' | 'clan' | 'logs'>('members');
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'members' | 'events' | 'schedule' | 'points' | 'eligibility' | 'clan' | 'items' | 'logs'>('members');
 
   // Data states
   const [members, setMembers] = useState<Member[]>([]);
@@ -150,6 +151,16 @@ export default function App() {
         return;
       }
 
+      // Save defaults to settings in firestore
+      const updatedSettings = {
+        ...settings,
+        defaultEventWeekdays: weekdays,
+        defaultEventTime: time || '',
+        defaultEventTypeId: eventTypeId
+      };
+      setSettings(updatedSettings);
+      await saveSettings(updatedSettings, 'Updated default event bulk generator configurations');
+
       // Find all dates in selectedYear/selectedMonth matching weekdays
       const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
       const generatedDates: string[] = [];
@@ -260,7 +271,26 @@ export default function App() {
     });
   };
 
-  const selectedMemberStats = memberStats.find(m => m.memberId === selectedMemberDetailsId) || null;
+  let selectedMemberStats = memberStats.find(m => m.memberId === selectedMemberDetailsId) || null;
+  if (!selectedMemberStats && selectedMemberDetailsId) {
+    const foundMem = members.find(m => m.id === selectedMemberDetailsId);
+    if (foundMem) {
+      selectedMemberStats = {
+        memberId: foundMem.id,
+        memberName: foundMem.name,
+        active: foundMem.active,
+        eventsAttendedCount: 0,
+        totalEventsCount: events.length,
+        requiredEventAttendedCount: 0,
+        requiredEventTotalCount: 0,
+        totalPoints: 0,
+        maxPoints: 0,
+        scorePercentage: 0,
+        isEligible: false,
+        attendanceMap: {}
+      };
+    }
+  }
   const isAdmin = Boolean(user);
 
   const handleToggleUnlockMonth = async (year: number, month: number) => {
@@ -346,6 +376,7 @@ export default function App() {
                   selectedYear={selectedYear}
                   selectedMonth={selectedMonth}
                   onNavigate={setActiveTab}
+                  onOpenMemberDetails={(id) => setSelectedMemberDetailsId(id)}
                 />
               )}
 
@@ -368,6 +399,10 @@ export default function App() {
                     setSettingsInitialTab('schedule');
                     setActiveTab('settings');
                   }}
+                  settings={settings}
+                  isAdmin={isAdmin}
+                  adminUid={user?.uid || ''}
+                  onOpenAuth={() => setIsAuthOpen(true)}
                 />
               )}
 
@@ -416,6 +451,7 @@ export default function App() {
                   settings={settings}
                   selectedYear={selectedYear}
                   selectedMonth={selectedMonth}
+                  onOpenMemberDetails={(id) => setSelectedMemberDetailsId(id)}
                 />
               )}
 
@@ -447,6 +483,37 @@ export default function App() {
                 />
               )}
 
+              {activeTab === 'items' && (
+                <ItemDistributionView
+                  selectedYear={selectedYear}
+                  selectedMonth={selectedMonth}
+                  onPrevMonth={() => {
+                    if (selectedMonth === 1) {
+                      setSelectedMonth(12);
+                      setSelectedYear(prev => prev - 1);
+                    } else {
+                      setSelectedMonth(prev => prev - 1);
+                    }
+                  }}
+                  onNextMonth={() => {
+                    if (selectedMonth === 12) {
+                      setSelectedMonth(1);
+                      setSelectedYear(prev => prev + 1);
+                    } else {
+                      setSelectedMonth(prev => prev + 1);
+                    }
+                  }}
+                  members={members}
+                  memberStats={memberStats}
+                  events={events}
+                  settings={settings}
+                  isAdmin={isAdmin}
+                  adminUid={user?.uid || ''}
+                  onOpenAuth={() => setIsAuthOpen(true)}
+                  onOpenMemberDetails={(id) => setSelectedMemberDetailsId(id)}
+                />
+              )}
+
               {activeTab === 'settings' && (
                 isAdmin ? (
                   <SettingsView
@@ -460,6 +527,7 @@ export default function App() {
                     isAdmin={isAdmin}
                     onOpenAuth={() => setIsAuthOpen(true)}
                     initialTab={settingsInitialTab}
+                    onOpenMemberDetails={(id) => setSelectedMemberDetailsId(id)}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 bg-neutral-900 border border-neutral-800 rounded-2xl max-w-md mx-auto my-12 shadow-2xl">
@@ -504,6 +572,7 @@ export default function App() {
         selectedYear={selectedYear}
         selectedMonth={selectedMonth}
         onGenerate={handleGenerateBulkEvents}
+        settings={settings}
       />
 
       <MemberDetailsModal
