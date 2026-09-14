@@ -266,7 +266,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           month: m,
           points: Number(schedPoints)
         });
-        showAlert('Event updated successfully in Firestore!', 'success');
+        showAlert('Event updated successfully!', 'success');
         handleCancelEditEvent();
       } else {
         await createEvent({
@@ -279,13 +279,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           points: Number(schedPoints),
           active: true
         });
-        showAlert('Event scheduled successfully in Firestore!', 'success');
+        showAlert('Event scheduled successfully!', 'success');
         setSchedTime('');
       }
       onRefreshData();
     } catch (err) {
       console.error('Schedule event failed', err);
-      showAlert(editingEventId ? 'Failed to update event in Firestore.' : 'Failed to schedule event in Firestore.', 'error');
+      showAlert(editingEventId ? 'Failed to update event.' : 'Failed to schedule event.', 'error');
     }
   };
 
@@ -298,7 +298,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       await savePointsConfiguration(pointsForm, eventTypes);
       setPointsSavedRecently(true);
-      showAlert('Event Point Configuration successfully saved to Firestore!', 'success');
+      showAlert('Event Point Configuration successfully saved!', 'success');
       onRefreshData();
     } catch (err: any) {
       console.error('Save points failed', err);
@@ -321,7 +321,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         },
         `Updated eligibility criteria (Min Score: ${eligibilityForm.minimumScorePercentage}%, Required Events: ${eligibilityForm.minimumRequiredAttendance})`
       );
-      showAlert('Eligibility settings saved successfully in Firestore!', 'success');
+      showAlert('Eligibility settings saved successfully!', 'success');
       onRefreshData();
     } catch (err: any) {
       console.error('Save eligibility failed', err);
@@ -342,7 +342,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         },
         `Updated clan details (Clan: "${clanForm.clanName}", Server: "${clanForm.serverName}")`
       );
-      showAlert('Clan settings saved successfully in Firestore!', 'success');
+      showAlert('Clan settings saved successfully!', 'success');
       onRefreshData();
     } catch (err: any) {
       console.error('Save clan failed', err);
@@ -372,7 +372,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         },
         `Updated item configurations`
       );
-      showAlert('Item configuration saved successfully in Firestore!', 'success');
+      showAlert('Item configuration saved successfully!', 'success');
       onRefreshData();
     } catch (err: any) {
       console.error('Save items failed', err);
@@ -873,7 +873,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             >
               {isSavingPoints ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Saving to Firestore...
+                  <Loader2 className="w-4 h-4 animate-spin" /> Saving...
                 </>
               ) : (
                 <>

@@ -100,7 +100,7 @@ export default function App() {
       const isOfflineOrUnavailable = 
         err?.message?.includes('unavailable') || 
         err?.message?.includes('offline') || 
-        err?.message?.includes('Could not reach Cloud Firestore') ||
+        err?.message?.includes('Could not reach server') ||
         err?.code === 'unavailable';
 
       if (isOfflineOrUnavailable) {
@@ -320,7 +320,7 @@ export default function App() {
         `${willBeUnlocked ? 'Unlocked' : 'Locked'} attendance records for ${monthKey}`
       );
     } catch (err) {
-      console.error('Failed to save unlock/lock month state to Firestore:', err);
+      console.error('Failed to save unlock/lock month state:', err);
       setSettings(settings);
     }
   };
