@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { MemberMonthlyStats, ClanEvent, EventType, AttendanceRecord, Settings, ItemDistribution, DroppedItem } from '../types';
 import { X, Trophy, CheckCircle2, XCircle, Calendar, ShieldCheck, Gift } from 'lucide-react';
 import { format12HourTime, getEventEffectivePoints } from '../utils/calculations';
+import { getEventColorTheme } from '../utils/eventColors';
 import { getItemDistributionsByMember, getDroppedItemsForMonth } from '../services/dataService';
 
 interface MemberDetailsModalProps {
@@ -149,16 +150,28 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
             <p className="text-xs text-neutral-500 p-4 text-center">No events scheduled for this month.</p>
           ) : (
             events.map(event => {
-              const et = eventTypeMap.get(event.eventTypeId);
+              const theme = getEventColorTheme(event, eventTypes);
               const attended = memberAttendance.get(event.id) || false;
 
               return (
-                <div key={event.id} className="p-3.5 flex items-center justify-between hover:bg-neutral-800/30 transition-colors">
+                <div 
+                  key={event.id} 
+                  className="p-3.5 flex items-center justify-between hover:bg-neutral-800/30 transition-colors"
+                  style={{
+                    borderLeft: `3px solid ${theme.hex}`
+                  }}
+                >
                   <div className="flex items-center gap-3">
-                    <span className="text-lg">{et?.icon || '📅'}</span>
+                    <span className="text-lg">{theme.icon}</span>
                     <div>
-                      <p className="text-xs font-semibold text-white">{event.name}</p>
-                      <p className="text-[10px] text-neutral-400">
+                      <div className="flex items-center gap-2">
+                        <span 
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: theme.hex }}
+                        />
+                        <p className="text-xs font-semibold text-white">{event.name}</p>
+                      </div>
+                      <p className="text-[10px] text-neutral-400 mt-0.5">
                         {event.date}{event.time ? ` • ${format12HourTime(event.time)}` : ''} • {getEventEffectivePoints(event, eventTypes, settings)} pts
                       </p>
                     </div>

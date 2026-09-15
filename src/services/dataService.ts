@@ -51,7 +51,7 @@ export async function withRetry<T>(operation: () => Promise<T>, maxRetries = 3, 
         err?.code === 'unavailable' || 
         err?.message?.includes('unavailable') || 
         err?.message?.includes('offline') ||
-        err?.message?.includes('Could not reach Cloud Firestore') ||
+        err?.message?.includes('Could not reach server') ||
         err?.message?.includes('The operation could not be completed');
 
       if (isUnavailable && attempt < maxRetries - 1) {
@@ -327,7 +327,7 @@ export async function savePointsConfiguration(
   // 5. Log admin audit action
   await logAdminAction({
     action: 'Updated Points Configuration',
-    details: `Updated default points configuration for ${eventTypes.length} event types in Firestore (${Object.entries(pointsByShortName).map(([k, v]) => `${k}: ${v}pts`).join(', ')})`,
+    details: `Updated default points configuration for ${eventTypes.length} event types (${Object.entries(pointsByShortName).map(([k, v]) => `${k}: ${v}pts`).join(', ')})`,
     target: 'settings'
   });
 }

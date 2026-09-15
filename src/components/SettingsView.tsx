@@ -12,6 +12,7 @@ import {
 } from '../services/dataService';
 import { AuditLogsTab } from './AuditLogsTab';
 import { format12HourTime, getEventEffectivePoints } from '../utils/calculations';
+import { getEventTypeColorTheme, EVENT_COLOR_PALETTE } from '../utils/eventColors';
 
 interface SettingsViewProps {
   members: Member[];
@@ -266,7 +267,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           month: m,
           points: Number(schedPoints)
         });
-        showAlert('Event updated successfully!', 'success');
+        showAlert('Event updated successfully in!', 'success');
         handleCancelEditEvent();
       } else {
         await createEvent({
@@ -279,7 +280,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           points: Number(schedPoints),
           active: true
         });
-        showAlert('Event scheduled successfully!', 'success');
+        showAlert('Event scheduled successfully in!', 'success');
         setSchedTime('');
       }
       onRefreshData();
@@ -584,45 +585,77 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {eventTypes.map(et => (
-              <div key={et.id} className="bg-neutral-950/60 border border-neutral-800 rounded-2xl p-5 flex flex-col justify-between shadow-lg">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-2xl">{et.icon}</span>
-                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                      {et.points} pts
-                    </span>
+            {eventTypes.map(et => {
+              const theme = getEventTypeColorTheme(et);
+              return (
+                <div 
+                  key={et.id} 
+                  className="bg-neutral-950/60 border rounded-2xl p-5 flex flex-col justify-between shadow-lg transition-all"
+                  style={{
+                    borderColor: `rgba(${theme.rgb.r}, ${theme.rgb.g}, ${theme.rgb.b}, 0.35)`,
+                    borderLeftColor: theme.hex,
+                    borderLeftWidth: '4px'
+                  }}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div 
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-sm"
+                        style={{
+                          backgroundColor: `rgba(${theme.rgb.r}, ${theme.rgb.g}, ${theme.rgb.b}, 0.18)`,
+                          border: `1px solid rgba(${theme.rgb.r}, ${theme.rgb.g}, ${theme.rgb.b}, 0.35)`
+                        }}
+                      >
+                        {et.icon}
+                      </div>
+                      <span 
+                        className="px-2.5 py-1 rounded-full text-xs font-bold font-mono"
+                        style={{
+                          backgroundColor: `rgba(${theme.rgb.r}, ${theme.rgb.g}, ${theme.rgb.b}, 0.2)`,
+                          color: theme.lightHex,
+                          border: `1px solid rgba(${theme.rgb.r}, ${theme.rgb.g}, ${theme.rgb.b}, 0.4)`
+                        }}
+                      >
+                        {et.points} pts
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span 
+                        className="w-2.5 h-2.5 rounded-full shrink-0" 
+                        style={{ backgroundColor: theme.hex, boxShadow: `0 0 6px ${theme.hex}` }}
+                      />
+                      <h4 className="text-base font-bold text-white">{et.name}</h4>
+                    </div>
+                    <p className="text-xs text-neutral-400 mt-1">Short Name: <strong className="text-white">{et.shortName}</strong></p>
                   </div>
-                  <h4 className="text-base font-bold text-white">{et.name}</h4>
-                  <p className="text-xs text-neutral-400 mt-0.5">Short Name: <strong className="text-white">{et.shortName}</strong></p>
-                </div>
 
-                <div className="flex items-center justify-end gap-2 mt-6 pt-3 border-t border-neutral-800">
-                  <button
-                    onClick={() => {
-                      if (!isAdmin) { onOpenAuth(); return; }
-                      setEditingEventType(et);
-                      setEtName(et.name);
-                      setEtShortName(et.shortName);
-                      setEtPoints(et.points);
-                      setEtIcon(et.icon);
-                      setEtColor(et.color || '#f59e0b');
-                      setIsAddEventTypeOpen(true);
-                    }}
-                    className="p-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteEventType(et)}
-                    className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs transition-colors"
-                    title="Delete Event Type"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center justify-end gap-2 mt-6 pt-3 border-t border-neutral-800">
+                    <button
+                      onClick={() => {
+                        if (!isAdmin) { onOpenAuth(); return; }
+                        setEditingEventType(et);
+                        setEtName(et.name);
+                        setEtShortName(et.shortName);
+                        setEtPoints(et.points);
+                        setEtIcon(et.icon);
+                        setEtColor(et.color || '#f59e0b');
+                        setIsAddEventTypeOpen(true);
+                      }}
+                      className="p-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteEventType(et)}
+                      className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs transition-colors"
+                      title="Delete Event Type"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -1128,6 +1161,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   placeholder="⚔"
                   className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-400 mb-1.5">Event Color Theme</label>
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  {EVENT_COLOR_PALETTE.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setEtColor(c)}
+                      className={`w-7 h-7 rounded-lg transition-transform ${
+                        etColor === c ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-neutral-900' : 'hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: c }}
+                      title={c}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={etColor}
+                    onChange={(e) => setEtColor(e.target.value)}
+                    className="w-8 h-8 rounded-lg bg-neutral-800 border border-neutral-700 cursor-pointer p-0.5"
+                  />
+                  <input
+                    type="text"
+                    value={etColor}
+                    onChange={(e) => setEtColor(e.target.value)}
+                    placeholder="#f59e0b"
+                    className="flex-1 bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-1.5 text-xs text-white font-mono uppercase focus:outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
